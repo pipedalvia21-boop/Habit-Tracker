@@ -3,9 +3,7 @@ import {
   SafeAreaView,
   View,
   Text,
-  FlatList,
   TouchableOpacity,
-  TextInput,
   StyleSheet,
   StatusBar
 } from "react-native";
@@ -15,6 +13,7 @@ import { onAuthStateChanged, User } from "firebase/auth";
 import { auth } from "./firebaseConfig";
 import AuthScreen from "./AuthScreen";
 import ProfileScreen from "./ProfileScreen";
+import TodayScreen from "./TodayScreen";
 
 type HabitId = string;
 type Tab = "today" | "stats" | "profile";
@@ -23,6 +22,7 @@ type Habit = {
   id: HabitId;
   name: string;
   color: string;
+  reminderId?: string;
 };
 
 type CompletionMap = {
@@ -47,34 +47,24 @@ function calculateStreak(habitId: HabitId, completions: CompletionMap): number {
   const d = new Date();
   const todayStr = todayKey();
   const todayIds = completions[todayStr] ?? [];
-  if (!todayIds.includes(habitId)) {
-    d.setDate(d.getDate() - 1);
-  }
+  if (!todayIds.includes(habitId)) d.setDate(d.getDate() - 1);
   for (let i = 0; i < 365; i++) {
     const yyyy = d.getFullYear();
     const mm = String(d.getMonth() + 1).padStart(2, "0");
     const dd = String(d.getDate()).padStart(2, "0");
     const key = `${yyyy}-${mm}-${dd}`;
     const ids = completions[key] ?? [];
-    if (ids.includes(habitId)) {
-      streak++;
-      d.setDate(d.getDate() - 1);
-    } else {
-      break;
-    }
+    if (ids.includes(habitId)) { streak++; d.setDate(d.getDate() - 1); }
+    else break;
   }
   return streak;
 }
-
-const presetColors = ["#FF6B6B", "#4ECDC4", "#FFD166", "#6C5CE7", "#00B894"];
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [habits, setHabits] = useState<Habit[]>([]);
   const [completions, setCompletions] = useState<CompletionMap>({});
-  const [newHabitName, setNewHabitName] = useState("");
-  const [selectedColor, setSelectedColor] = useState(presetColors[0]);
   const [activeTab, setActiveTab] = useState<Tab>("today");
   const [profile, setProfile] = useState<Profile>({ name: "", email: "" });
 
@@ -132,16 +122,13 @@ export default function App() {
     });
   };
 
-  const addHabit = () => {
-    const name = newHabitName.trim();
-    if (!name) return;
+  const addHabit = (name: string, color: string) => {
     const newHabit: Habit = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       name,
-      color: selectedColor
+      color
     };
     setHabits((prev) => [...prev, newHabit]);
-    setNewHabitName("");
   };
 
   const removeHabit = (id: HabitId) => {
@@ -155,7 +142,9 @@ export default function App() {
     });
   };
 
-  const todaysCompletions = new Set(completions[today] ?? []);
+  const updateHabit = (updated: Habit) => {
+    setHabits((prev) => prev.map((h) => h.id === updated.id ? updated : h));
+  };
 
   const stats = useMemo(() => {
     const totalDays = Object.keys(completions).length || 1;
@@ -167,32 +156,6 @@ export default function App() {
     }
     return { totalDays, perHabit };
   }, [completions]);
-
-  const renderHabit = ({ item }: { item: Habit }) => {
-    const done = todaysCompletions.has(item.id);
-    const streak = calculateStreak(item.id, completions);
-    return (
-      <View style={styles.habitRow}>
-        <TouchableOpacity
-          onPress={() => toggleCompletion(item.id)}
-          style={[styles.checkbox, { borderColor: item.color, backgroundColor: done ? item.color : "transparent" }]}
-        >
-          {done && <Text style={styles.checkboxText}>✓</Text>}
-        </TouchableOpacity>
-        <View style={styles.habitInfo}>
-          <Text style={styles.habitName}>{item.name}</Text>
-          {streak > 0 && (
-            <Text style={[styles.streakText, { color: item.color }]}>
-              🔥 {streak} day{streak === 1 ? "" : "s"} streak
-            </Text>
-          )}
-        </View>
-        <TouchableOpacity onPress={() => removeHabit(item.id)}>
-          <Text style={styles.deleteText}>×</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  };
 
   if (authLoading) {
     return (
@@ -217,44 +180,16 @@ export default function App() {
       <StatusBar barStyle="dark-content" />
       <View style={styles.container}>
         {activeTab === "today" && (
-          <View style={styles.screen}>
-            <Text style={styles.screenTitle}>
-              {profile.name ? `Hey, ${profile.name.split(" ")[0]} 👋` : "Today"}
-            </Text>
-            {habits.length === 0 ? (
-              <Text style={styles.emptyText}>Add your first habit below to get started.</Text>
-            ) : (
-              <FlatList
-                data={habits}
-                keyExtractor={(item) => item.id}
-                renderItem={renderHabit}
-                contentContainerStyle={{ paddingBottom: 24 }}
-              />
-            )}
-            <View style={styles.newHabitContainer}>
-              <Text style={styles.sectionLabel}>New habit</Text>
-              <TextInput
-                value={newHabitName}
-                onChangeText={setNewHabitName}
-                placeholder="e.g. Drink 2L of water"
-                style={styles.input}
-                returnKeyType="done"
-                onSubmitEditing={addHabit}
-              />
-              <View style={styles.colorRow}>
-                {presetColors.map((c) => (
-                  <TouchableOpacity
-                    key={c}
-                    style={[styles.colorDot, { backgroundColor: c, borderWidth: selectedColor === c ? 2 : 0 }]}
-                    onPress={() => setSelectedColor(c)}
-                  />
-                ))}
-              </View>
-              <TouchableOpacity style={styles.addButton} onPress={addHabit}>
-                <Text style={styles.addButtonText}>Add habit</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+          <TodayScreen
+            habits={habits}
+            completions={completions}
+            today={today}
+            profileName={profile.name}
+            onToggleCompletion={toggleCompletion}
+            onAddHabit={addHabit}
+            onRemoveHabit={removeHabit}
+            onUpdateHabit={updateHabit}
+          />
         )}
         {activeTab === "stats" && (
           <View style={styles.screen}>
@@ -324,27 +259,16 @@ const styles = StyleSheet.create({
   screen: { flex: 1, paddingTop: 16 },
   screenTitle: { fontSize: 28, fontWeight: "700", marginBottom: 12, color: "#111827" },
   emptyText: { marginTop: 16, fontSize: 16, color: "#6B7280" },
-  habitRow: { flexDirection: "row", alignItems: "center", paddingVertical: 10 },
-  checkbox: { width: 28, height: 28, borderRadius: 8, borderWidth: 2, alignItems: "center", justifyContent: "center", marginRight: 12 },
-  checkboxText: { color: "#fff", fontWeight: "700" },
-  habitInfo: { flex: 1 },
-  habitName: { fontSize: 16, fontWeight: "600", color: "#111827" },
-  streakText: { fontSize: 12, fontWeight: "500", marginTop: 2 },
-  deleteText: { fontSize: 22, color: "#9CA3AF", paddingHorizontal: 8 },
-  newHabitContainer: { marginTop: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: "#E5E7EB" },
   sectionLabel: { fontSize: 14, fontWeight: "600", color: "#6B7280", marginBottom: 6 },
-  input: { height: 44, borderRadius: 10, borderWidth: 1, borderColor: "#D1D5DB", paddingHorizontal: 12, backgroundColor: "#FFFFFF", fontSize: 15, marginBottom: 8 },
-  colorRow: { flexDirection: "row", marginBottom: 8 },
-  colorDot: { width: 24, height: 24, borderRadius: 12, marginRight: 8, borderColor: "#111827" },
-  addButton: { marginTop: 4, backgroundColor: "#111827", borderRadius: 10, paddingVertical: 10, alignItems: "center" },
-  addButtonText: { color: "#FFFFFF", fontWeight: "600", fontSize: 16 },
+  statRow: { flexDirection: "row", alignItems: "center", paddingVertical: 8 },
+  colorSwatch: { width: 16, height: 16, borderRadius: 4, marginRight: 8 },
+  statTextContainer: { flex: 1 },
+  habitName: { fontSize: 16, fontWeight: "600", color: "#111827" },
+  statSubText: { fontSize: 13, color: "#6B7280" },
+  streakText: { fontSize: 12, fontWeight: "500", marginTop: 2 },
   tabBar: { flexDirection: "row", backgroundColor: "#E5E7EB", borderRadius: 999, padding: 4, marginTop: 8 },
   tabItem: { flex: 1, paddingVertical: 8, borderRadius: 999, alignItems: "center" },
   tabItemActive: { backgroundColor: "#FFFFFF" },
   tabLabel: { fontSize: 14, fontWeight: "500", color: "#6B7280" },
-  tabLabelActive: { color: "#111827" },
-  statRow: { flexDirection: "row", alignItems: "center", paddingVertical: 8 },
-  colorSwatch: { width: 16, height: 16, borderRadius: 4, marginRight: 8 },
-  statTextContainer: { flex: 1 },
-  statSubText: { fontSize: 13, color: "#6B7280" }
+  tabLabelActive: { color: "#111827" }
 });
