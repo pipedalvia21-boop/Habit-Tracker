@@ -7,11 +7,14 @@ import {
   TouchableOpacity,
   TextInput,
   StyleSheet,
-  StatusBar,
-  ScrollView
+  StatusBar
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { StatusBar as ExpoStatusBar } from "expo-status-bar";
+import { onAuthStateChanged, User } from "firebase/auth";
+import { auth } from "./firebaseConfig";
+import AuthScreen from "./AuthScreen";
+import ProfileScreen from "./ProfileScreen";
 
 type HabitId = string;
 type Tab = "today" | "stats" | "profile";
@@ -30,10 +33,6 @@ type Profile = {
   name: string;
   email: string;
 };
-
-const HABITS_KEY = "habits";
-const COMPLETIONS_KEY = "completions";
-const PROFILE_KEY = "profile";
 
 function todayKey() {
   const d = new Date();
@@ -70,61 +69,65 @@ function calculateStreak(habitId: HabitId, completions: CompletionMap): number {
 const presetColors = ["#FF6B6B", "#4ECDC4", "#FFD166", "#6C5CE7", "#00B894"];
 
 export default function App() {
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [habits, setHabits] = useState<Habit[]>([]);
   const [completions, setCompletions] = useState<CompletionMap>({});
   const [newHabitName, setNewHabitName] = useState("");
   const [selectedColor, setSelectedColor] = useState(presetColors[0]);
   const [activeTab, setActiveTab] = useState<Tab>("today");
   const [profile, setProfile] = useState<Profile>({ name: "", email: "" });
-  const [editingProfile, setEditingProfile] = useState(false);
-  const [draftProfile, setDraftProfile] = useState<Profile>({ name: "", email: "" });
 
   const today = todayKey();
 
   useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      setAuthLoading(false);
+    });
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
     const loadData = async () => {
       try {
         const [habitsJson, completionsJson, profileJson] = await Promise.all([
-          AsyncStorage.getItem(HABITS_KEY),
-          AsyncStorage.getItem(COMPLETIONS_KEY),
-          AsyncStorage.getItem(PROFILE_KEY)
+          AsyncStorage.getItem(`${user.uid}_habits`),
+          AsyncStorage.getItem(`${user.uid}_completions`),
+          AsyncStorage.getItem(`${user.uid}_profile`)
         ]);
         if (habitsJson) setHabits(JSON.parse(habitsJson));
         if (completionsJson) setCompletions(JSON.parse(completionsJson));
         if (profileJson) setProfile(JSON.parse(profileJson));
+        else setProfile({ name: "", email: user.email ?? "" });
       } catch (e) {
         console.warn("Failed to load data", e);
       }
     };
     loadData();
-  }, []);
+  }, [user]);
 
   useEffect(() => {
-    AsyncStorage.setItem(HABITS_KEY, JSON.stringify(habits)).catch((e) =>
-      console.warn("Failed to persist habits", e)
-    );
-  }, [habits]);
+    if (!user) return;
+    AsyncStorage.setItem(`${user.uid}_habits`, JSON.stringify(habits));
+  }, [habits, user]);
 
   useEffect(() => {
-    AsyncStorage.setItem(COMPLETIONS_KEY, JSON.stringify(completions)).catch(
-      (e) => console.warn("Failed to persist completions", e)
-    );
-  }, [completions]);
+    if (!user) return;
+    AsyncStorage.setItem(`${user.uid}_completions`, JSON.stringify(completions));
+  }, [completions, user]);
 
   useEffect(() => {
-    AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(profile)).catch((e) =>
-      console.warn("Failed to persist profile", e)
-    );
-  }, [profile]);
+    if (!user) return;
+    AsyncStorage.setItem(`${user.uid}_profile`, JSON.stringify(profile));
+  }, [profile, user]);
 
   const toggleCompletion = (habitId: HabitId) => {
     setCompletions((prev) => {
       const todays = new Set(prev[today] ?? []);
-      if (todays.has(habitId)) {
-        todays.delete(habitId);
-      } else {
-        todays.add(habitId);
-      }
+      if (todays.has(habitId)) todays.delete(habitId);
+      else todays.add(habitId);
       return { ...prev, [today]: Array.from(todays) };
     });
   };
@@ -152,11 +155,6 @@ export default function App() {
     });
   };
 
-  const saveProfile = () => {
-    setProfile(draftProfile);
-    setEditingProfile(false);
-  };
-
   const todaysCompletions = new Set(completions[today] ?? []);
 
   const stats = useMemo(() => {
@@ -177,10 +175,7 @@ export default function App() {
       <View style={styles.habitRow}>
         <TouchableOpacity
           onPress={() => toggleCompletion(item.id)}
-          style={[
-            styles.checkbox,
-            { borderColor: item.color, backgroundColor: done ? item.color : "transparent" }
-          ]}
+          style={[styles.checkbox, { borderColor: item.color, backgroundColor: done ? item.color : "transparent" }]}
         >
           {done && <Text style={styles.checkboxText}>✓</Text>}
         </TouchableOpacity>
@@ -199,152 +194,111 @@ export default function App() {
     );
   };
 
-  const TodayScreen = () => (
-    <View style={styles.screen}>
-      <Text style={styles.screenTitle}>
-        {profile.name ? `Hey, ${profile.name.split(" ")[0]} 👋` : "Today"}
-      </Text>
-      {habits.length === 0 ? (
-        <Text style={styles.emptyText}>Add your first habit below to get started.</Text>
-      ) : (
-        <FlatList
-          data={habits}
-          keyExtractor={(item) => item.id}
-          renderItem={renderHabit}
-          contentContainerStyle={{ paddingBottom: 24 }}
-        />
-      )}
-      <View style={styles.newHabitContainer}>
-        <Text style={styles.sectionLabel}>New habit</Text>
-        <TextInput
-          value={newHabitName}
-          onChangeText={setNewHabitName}
-          placeholder="e.g. Drink 2L of water"
-          style={styles.input}
-          returnKeyType="done"
-          onSubmitEditing={addHabit}
-        />
-        <View style={styles.colorRow}>
-          {presetColors.map((c) => (
-            <TouchableOpacity
-              key={c}
-              style={[styles.colorDot, { backgroundColor: c, borderWidth: selectedColor === c ? 2 : 0 }]}
-              onPress={() => setSelectedColor(c)}
-            />
-          ))}
+  if (authLoading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+          <Text style={{ fontSize: 16, color: "#6B7280" }}>Loading...</Text>
         </View>
-        <TouchableOpacity style={styles.addButton} onPress={addHabit}>
-          <Text style={styles.addButtonText}>Add habit</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
+      </SafeAreaView>
+    );
+  }
 
-  const StatsScreen = () => (
-    <View style={styles.screen}>
-      <Text style={styles.screenTitle}>Stats</Text>
-      {habits.length === 0 ? (
-        <Text style={styles.emptyText}>Once you have habits, you will see stats here.</Text>
-      ) : (
-        <>
-          <Text style={styles.sectionLabel}>Days tracked: {stats.totalDays}</Text>
-          {habits.map((h) => {
-            const count = stats.perHabit[h.id] ?? 0;
-            const completionRate = ((count / stats.totalDays) * 100).toFixed(0);
-            const streak = calculateStreak(h.id, completions);
-            return (
-              <View key={h.id} style={styles.statRow}>
-                <View style={[styles.colorSwatch, { backgroundColor: h.color }]} />
-                <View style={styles.statTextContainer}>
-                  <Text style={styles.habitName}>{h.name}</Text>
-                  <Text style={styles.statSubText}>
-                    Completed {count} day{count === 1 ? "" : "s"} ({completionRate}%)
-                  </Text>
-                  {streak > 0 && (
-                    <Text style={[styles.streakText, { color: h.color }]}>
-                      🔥 Current streak: {streak} day{streak === 1 ? "" : "s"}
-                    </Text>
-                  )}
-                </View>
-              </View>
-            );
-          })}
-        </>
-      )}
-    </View>
-  );
-
-  const ProfileScreen = () => (
-    <ScrollView style={styles.screen}>
-      <Text style={styles.screenTitle}>Profile</Text>
-      <View style={styles.profileCard}>
-        <View style={styles.avatarCircle}>
-          <Text style={styles.avatarText}>
-            {profile.name ? profile.name[0].toUpperCase() : "?"}
-          </Text>
-        </View>
-        {!editingProfile ? (
-          <>
-            <Text style={styles.profileName}>{profile.name || "No name set"}</Text>
-            <Text style={styles.profileEmail}>{profile.email || "No email set"}</Text>
-            <TouchableOpacity
-              style={styles.editButton}
-              onPress={() => {
-                setDraftProfile(profile);
-                setEditingProfile(true);
-              }}
-            >
-              <Text style={styles.editButtonText}>Edit Profile</Text>
-            </TouchableOpacity>
-          </>
-        ) : (
-          <>
-            <Text style={styles.sectionLabel}>Name</Text>
-            <TextInput
-              value={draftProfile.name}
-              onChangeText={(t) => setDraftProfile((p) => ({ ...p, name: t }))}
-              placeholder="Your name"
-              style={styles.input}
-            />
-            <Text style={styles.sectionLabel}>Email</Text>
-            <TextInput
-              value={draftProfile.email}
-              onChangeText={(t) => setDraftProfile((p) => ({ ...p, email: t }))}
-              placeholder="your@email.com"
-              style={styles.input}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-            <TouchableOpacity style={styles.addButton} onPress={saveProfile}>
-              <Text style={styles.addButtonText}>Save</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.editButton, { marginTop: 8 }]}
-              onPress={() => setEditingProfile(false)}
-            >
-              <Text style={styles.editButtonText}>Cancel</Text>
-            </TouchableOpacity>
-          </>
-        )}
-      </View>
-      <View style={styles.statsCard}>
-        <Text style={styles.sectionLabel}>Your Stats</Text>
-        <Text style={styles.statSummary}>Total habits: {habits.length}</Text>
-        <Text style={styles.statSummary}>Days tracked: {Object.keys(completions).length}</Text>
-        <Text style={styles.statSummary}>
-          Completions today: {(completions[today] ?? []).length}/{habits.length}
-        </Text>
-      </View>
-    </ScrollView>
-  );
+  if (!user) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <AuthScreen onAuth={() => {}} />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" />
       <View style={styles.container}>
-        {activeTab === "today" && <TodayScreen />}
-        {activeTab === "stats" && <StatsScreen />}
-        {activeTab === "profile" && <ProfileScreen />}
+        {activeTab === "today" && (
+          <View style={styles.screen}>
+            <Text style={styles.screenTitle}>
+              {profile.name ? `Hey, ${profile.name.split(" ")[0]} 👋` : "Today"}
+            </Text>
+            {habits.length === 0 ? (
+              <Text style={styles.emptyText}>Add your first habit below to get started.</Text>
+            ) : (
+              <FlatList
+                data={habits}
+                keyExtractor={(item) => item.id}
+                renderItem={renderHabit}
+                contentContainerStyle={{ paddingBottom: 24 }}
+              />
+            )}
+            <View style={styles.newHabitContainer}>
+              <Text style={styles.sectionLabel}>New habit</Text>
+              <TextInput
+                value={newHabitName}
+                onChangeText={setNewHabitName}
+                placeholder="e.g. Drink 2L of water"
+                style={styles.input}
+                returnKeyType="done"
+                onSubmitEditing={addHabit}
+              />
+              <View style={styles.colorRow}>
+                {presetColors.map((c) => (
+                  <TouchableOpacity
+                    key={c}
+                    style={[styles.colorDot, { backgroundColor: c, borderWidth: selectedColor === c ? 2 : 0 }]}
+                    onPress={() => setSelectedColor(c)}
+                  />
+                ))}
+              </View>
+              <TouchableOpacity style={styles.addButton} onPress={addHabit}>
+                <Text style={styles.addButtonText}>Add habit</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+        {activeTab === "stats" && (
+          <View style={styles.screen}>
+            <Text style={styles.screenTitle}>Stats</Text>
+            {habits.length === 0 ? (
+              <Text style={styles.emptyText}>Once you have habits, you will see stats here.</Text>
+            ) : (
+              <>
+                <Text style={styles.sectionLabel}>Days tracked: {stats.totalDays}</Text>
+                {habits.map((h) => {
+                  const count = stats.perHabit[h.id] ?? 0;
+                  const completionRate = ((count / stats.totalDays) * 100).toFixed(0);
+                  const streak = calculateStreak(h.id, completions);
+                  return (
+                    <View key={h.id} style={styles.statRow}>
+                      <View style={[styles.colorSwatch, { backgroundColor: h.color }]} />
+                      <View style={styles.statTextContainer}>
+                        <Text style={styles.habitName}>{h.name}</Text>
+                        <Text style={styles.statSubText}>
+                          Completed {count} day{count === 1 ? "" : "s"} ({completionRate}%)
+                        </Text>
+                        {streak > 0 && (
+                          <Text style={[styles.streakText, { color: h.color }]}>
+                            🔥 Current streak: {streak} day{streak === 1 ? "" : "s"}
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+                  );
+                })}
+              </>
+            )}
+          </View>
+        )}
+        {activeTab === "profile" && (
+          <ProfileScreen
+            user={user}
+            profile={profile}
+            habits={habits}
+            completions={completions}
+            today={today}
+            onSave={setProfile}
+          />
+        )}
         <View style={styles.tabBar}>
           {(["today", "stats", "profile"] as Tab[]).map((tab) => (
             <TouchableOpacity
@@ -392,14 +346,5 @@ const styles = StyleSheet.create({
   statRow: { flexDirection: "row", alignItems: "center", paddingVertical: 8 },
   colorSwatch: { width: 16, height: 16, borderRadius: 4, marginRight: 8 },
   statTextContainer: { flex: 1 },
-  statSubText: { fontSize: 13, color: "#6B7280" },
-  profileCard: { backgroundColor: "#FFFFFF", borderRadius: 16, padding: 20, marginBottom: 16, alignItems: "center" },
-  avatarCircle: { width: 72, height: 72, borderRadius: 36, backgroundColor: "#111827", alignItems: "center", justifyContent: "center", marginBottom: 12 },
-  avatarText: { color: "#FFFFFF", fontSize: 28, fontWeight: "700" },
-  profileName: { fontSize: 20, fontWeight: "700", color: "#111827", marginBottom: 4 },
-  profileEmail: { fontSize: 14, color: "#6B7280", marginBottom: 16 },
-  editButton: { borderWidth: 1, borderColor: "#D1D5DB", borderRadius: 10, paddingVertical: 8, paddingHorizontal: 24 },
-  editButtonText: { fontSize: 14, fontWeight: "600", color: "#111827" },
-  statsCard: { backgroundColor: "#FFFFFF", borderRadius: 16, padding: 20, marginBottom: 16 },
-  statSummary: { fontSize: 15, color: "#374151", marginBottom: 6 }
+  statSubText: { fontSize: 13, color: "#6B7280" }
 });
