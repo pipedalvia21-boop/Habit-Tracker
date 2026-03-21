@@ -1,11 +1,21 @@
-# Habit Tracker
+# Habit Tracker App
 
-## Run the app
+A React Native habit tracking app built with Expo.
 
+## Installation
+
+This project uses Expo SDK 55 + React Native 0.83. Due to peer dependency conflicts with npm v7+, install with:
 ```bash
-cd habit-tracker
-npm install
-npm start
+npm install --legacy-peer-deps
 ```
 
-Then open the project in the Expo Go app (scan QR code) or press `i` for iOS simulator / `a` for Android emulator.
+Then start the app:
+```bash
+npx expo start --web
+```
+
+## Features (Phase 1 - In Progress)
+- Add, view and delete habits
+- Mark habits as complete daily
+- Track completion stats and progress
+- Local storage with AsyncStorage
