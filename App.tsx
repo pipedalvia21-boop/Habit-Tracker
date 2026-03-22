@@ -17,6 +17,8 @@ import ProfileScreen from "./ProfileScreen";
 import TodayScreen from "./TodayScreen";
 import RankCard from "./RankSystem";
 import BadgeDisplay from "./BadgeSystem";
+import WeeklyAnalytics from "./WeeklyAnalytics";
+import StreakRecovery from "./StreakRecovery";
 
 type HabitId = string;
 type Tab = "today" | "stats" | "profile";
@@ -154,19 +156,16 @@ export default function App() {
     const perHabit: { [id: string]: number } = {};
     let totalCompletions = 0;
     let longestStreak = 0;
-
     for (const dayIds of Object.values(completions)) {
       for (const id of dayIds) {
         perHabit[id] = (perHabit[id] ?? 0) + 1;
         totalCompletions++;
       }
     }
-
     for (const habit of habits) {
       const streak = calculateStreak(habit.id, completions);
       if (streak > longestStreak) longestStreak = streak;
     }
-
     return { totalDays, perHabit, totalCompletions, longestStreak };
   }, [completions, habits]);
 
@@ -207,7 +206,13 @@ export default function App() {
         {activeTab === "stats" && (
           <ScrollView style={styles.screen}>
             <Text style={styles.screenTitle}>Stats</Text>
+            <StreakRecovery
+              habits={habits}
+              completions={completions}
+              onRecover={setCompletions}
+            />
             <RankCard totalCompletions={stats.totalCompletions} />
+            <WeeklyAnalytics habits={habits} completions={completions} />
             <BadgeDisplay
               stats={{
                 totalCompletions: stats.totalCompletions,
