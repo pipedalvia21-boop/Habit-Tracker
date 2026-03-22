@@ -20,9 +20,10 @@ import BadgeDisplay from "./BadgeSystem";
 import WeeklyAnalytics from "./WeeklyAnalytics";
 import StreakRecovery from "./StreakRecovery";
 import SocialScreen from "./SocialScreen";
+import AIScreen from "./AIScreen";
 
 type HabitId = string;
-type Tab = "today" | "stats" | "social" | "profile";
+type Tab = "today" | "stats" | "social" | "ai" | "profile";
 
 type Habit = {
   id: HabitId;
@@ -188,10 +189,11 @@ export default function App() {
     );
   }
 
-  const TAB_ICONS: Record<Tab, string> = {
+  const TAB_LABELS: Record<Tab, string> = {
     today: "Today",
     stats: "Stats",
     social: "Social",
+    ai: "AI",
     profile: "Profile"
   };
 
@@ -262,6 +264,9 @@ export default function App() {
         {activeTab === "social" && (
           <SocialScreen user={user} userName={profile.name} />
         )}
+        {activeTab === "ai" && (
+          <AIScreen onAcceptHabit={addHabit} />
+        )}
         {activeTab === "profile" && (
           <ProfileScreen
             user={user}
@@ -273,14 +278,14 @@ export default function App() {
           />
         )}
         <View style={styles.tabBar}>
-          {(["today", "stats", "social", "profile"] as Tab[]).map((tab) => (
+          {(["today", "stats", "social", "ai", "profile"] as Tab[]).map((tab) => (
             <TouchableOpacity
               key={tab}
               style={[styles.tabItem, activeTab === tab && styles.tabItemActive]}
               onPress={() => setActiveTab(tab)}
             >
               <Text style={[styles.tabLabel, activeTab === tab && styles.tabLabelActive]}>
-                {TAB_ICONS[tab]}
+                {TAB_LABELS[tab]}
               </Text>
             </TouchableOpacity>
           ))}
@@ -308,6 +313,6 @@ const styles = StyleSheet.create({
   tabBar: { flexDirection: "row", backgroundColor: "#E5E7EB", borderRadius: 999, padding: 4, marginTop: 8 },
   tabItem: { flex: 1, paddingVertical: 8, borderRadius: 999, alignItems: "center" },
   tabItemActive: { backgroundColor: "#FFFFFF" },
-  tabLabel: { fontSize: 12, fontWeight: "500", color: "#6B7280" },
+  tabLabel: { fontSize: 11, fontWeight: "500", color: "#6B7280" },
   tabLabelActive: { color: "#111827" }
 });
