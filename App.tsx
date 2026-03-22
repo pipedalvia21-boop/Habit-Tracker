@@ -5,7 +5,8 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  StatusBar
+  StatusBar,
+  ScrollView
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { StatusBar as ExpoStatusBar } from "expo-status-bar";
@@ -14,6 +15,8 @@ import { auth } from "./firebaseConfig";
 import AuthScreen from "./AuthScreen";
 import ProfileScreen from "./ProfileScreen";
 import TodayScreen from "./TodayScreen";
+import RankCard from "./RankSystem";
+import BadgeDisplay from "./BadgeSystem";
 
 type HabitId = string;
 type Tab = "today" | "stats" | "profile";
@@ -149,13 +152,23 @@ export default function App() {
   const stats = useMemo(() => {
     const totalDays = Object.keys(completions).length || 1;
     const perHabit: { [id: string]: number } = {};
+    let totalCompletions = 0;
+    let longestStreak = 0;
+
     for (const dayIds of Object.values(completions)) {
       for (const id of dayIds) {
         perHabit[id] = (perHabit[id] ?? 0) + 1;
+        totalCompletions++;
       }
     }
-    return { totalDays, perHabit };
-  }, [completions]);
+
+    for (const habit of habits) {
+      const streak = calculateStreak(habit.id, completions);
+      if (streak > longestStreak) longestStreak = streak;
+    }
+
+    return { totalDays, perHabit, totalCompletions, longestStreak };
+  }, [completions, habits]);
 
   if (authLoading) {
     return (
@@ -192,14 +205,23 @@ export default function App() {
           />
         )}
         {activeTab === "stats" && (
-          <View style={styles.screen}>
+          <ScrollView style={styles.screen}>
             <Text style={styles.screenTitle}>Stats</Text>
-            {habits.length === 0 ? (
-              <Text style={styles.emptyText}>Once you have habits, you will see stats here.</Text>
-            ) : (
-              <>
-                <Text style={styles.sectionLabel}>Days tracked: {stats.totalDays}</Text>
-                {habits.map((h) => {
+            <RankCard totalCompletions={stats.totalCompletions} />
+            <BadgeDisplay
+              stats={{
+                totalCompletions: stats.totalCompletions,
+                totalHabits: habits.length,
+                longestStreak: stats.longestStreak,
+                daysTracked: stats.totalDays
+              }}
+            />
+            <View style={styles.statsCard}>
+              <Text style={styles.sectionLabel}>Habit Progress</Text>
+              {habits.length === 0 ? (
+                <Text style={styles.emptyText}>Once you have habits, you will see stats here.</Text>
+              ) : (
+                habits.map((h) => {
                   const count = stats.perHabit[h.id] ?? 0;
                   const completionRate = ((count / stats.totalDays) * 100).toFixed(0);
                   const streak = calculateStreak(h.id, completions);
@@ -219,10 +241,10 @@ export default function App() {
                       </View>
                     </View>
                   );
-                })}
-              </>
-            )}
-          </View>
+                })
+              )}
+            </View>
+          </ScrollView>
         )}
         {activeTab === "profile" && (
           <ProfileScreen
@@ -260,6 +282,7 @@ const styles = StyleSheet.create({
   screenTitle: { fontSize: 28, fontWeight: "700", marginBottom: 12, color: "#111827" },
   emptyText: { marginTop: 16, fontSize: 16, color: "#6B7280" },
   sectionLabel: { fontSize: 14, fontWeight: "600", color: "#6B7280", marginBottom: 6 },
+  statsCard: { backgroundColor: "#FFFFFF", borderRadius: 16, padding: 16, marginBottom: 16 },
   statRow: { flexDirection: "row", alignItems: "center", paddingVertical: 8 },
   colorSwatch: { width: 16, height: 16, borderRadius: 4, marginRight: 8 },
   statTextContainer: { flex: 1 },
