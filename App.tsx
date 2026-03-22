@@ -19,9 +19,10 @@ import RankCard from "./RankSystem";
 import BadgeDisplay from "./BadgeSystem";
 import WeeklyAnalytics from "./WeeklyAnalytics";
 import StreakRecovery from "./StreakRecovery";
+import SocialScreen from "./SocialScreen";
 
 type HabitId = string;
-type Tab = "today" | "stats" | "profile";
+type Tab = "today" | "stats" | "social" | "profile";
 
 type Habit = {
   id: HabitId;
@@ -187,6 +188,13 @@ export default function App() {
     );
   }
 
+  const TAB_ICONS: Record<Tab, string> = {
+    today: "Today",
+    stats: "Stats",
+    social: "Social",
+    profile: "Profile"
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" />
@@ -251,6 +259,9 @@ export default function App() {
             </View>
           </ScrollView>
         )}
+        {activeTab === "social" && (
+          <SocialScreen user={user} userName={profile.name} />
+        )}
         {activeTab === "profile" && (
           <ProfileScreen
             user={user}
@@ -262,14 +273,14 @@ export default function App() {
           />
         )}
         <View style={styles.tabBar}>
-          {(["today", "stats", "profile"] as Tab[]).map((tab) => (
+          {(["today", "stats", "social", "profile"] as Tab[]).map((tab) => (
             <TouchableOpacity
               key={tab}
               style={[styles.tabItem, activeTab === tab && styles.tabItemActive]}
               onPress={() => setActiveTab(tab)}
             >
               <Text style={[styles.tabLabel, activeTab === tab && styles.tabLabelActive]}>
-                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                {TAB_ICONS[tab]}
               </Text>
             </TouchableOpacity>
           ))}
@@ -297,6 +308,6 @@ const styles = StyleSheet.create({
   tabBar: { flexDirection: "row", backgroundColor: "#E5E7EB", borderRadius: 999, padding: 4, marginTop: 8 },
   tabItem: { flex: 1, paddingVertical: 8, borderRadius: 999, alignItems: "center" },
   tabItemActive: { backgroundColor: "#FFFFFF" },
-  tabLabel: { fontSize: 14, fontWeight: "500", color: "#6B7280" },
+  tabLabel: { fontSize: 12, fontWeight: "500", color: "#6B7280" },
   tabLabelActive: { color: "#111827" }
 });
