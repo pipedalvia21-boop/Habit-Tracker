@@ -9,10 +9,12 @@ import {
 } from "react-native";
 import { signOut, User } from "firebase/auth";
 import { auth } from "./firebaseConfig";
+import ProfilePicture from "./ProfilePicture";
 
 type Profile = {
   name: string;
   email: string;
+  photoUrl?: string;
 };
 
 type CompletionMap = {
@@ -41,11 +43,14 @@ export default function ProfileScreen({ user, profile, habits, completions, toda
     <ScrollView style={styles.screen}>
       <Text style={styles.screenTitle}>Profile</Text>
       <View style={styles.profileCard}>
-        <View style={styles.avatarCircle}>
-          <Text style={styles.avatarText}>
-            {profile.name ? profile.name[0].toUpperCase() : user?.email?.[0].toUpperCase() ?? "?"}
-          </Text>
-        </View>
+        <ProfilePicture
+          currentUrl={profile.photoUrl}
+          name={profile.name || user?.email || ""}
+          onUpload={(url) => {
+            const updated = { ...profile, photoUrl: url };
+            onSave(updated);
+          }}
+        />
         {!editing ? (
           <>
             <Text style={styles.profileName}>{profile.name || "No name set"}</Text>
@@ -101,8 +106,6 @@ const styles = StyleSheet.create({
   screen: { flex: 1, paddingTop: 16 },
   screenTitle: { fontSize: 28, fontWeight: "700", marginBottom: 12, color: "#111827" },
   profileCard: { backgroundColor: "#FFFFFF", borderRadius: 16, padding: 20, marginBottom: 16, alignItems: "center" },
-  avatarCircle: { width: 72, height: 72, borderRadius: 36, backgroundColor: "#111827", alignItems: "center", justifyContent: "center", marginBottom: 12 },
-  avatarText: { color: "#FFFFFF", fontSize: 28, fontWeight: "700" },
   profileName: { fontSize: 20, fontWeight: "700", color: "#111827", marginBottom: 4 },
   profileEmail: { fontSize: 14, color: "#6B7280", marginBottom: 16 },
   editButton: { borderWidth: 1, borderColor: "#D1D5DB", borderRadius: 10, paddingVertical: 8, paddingHorizontal: 24 },
